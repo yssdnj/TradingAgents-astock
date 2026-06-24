@@ -38,6 +38,7 @@ echo "▶ 启动服务..."
 nohup streamlit run web/app.py \
     --server.port $PORT \
     --server.headless true \
+    --server.address 0.0.0.0 \
     > nohup.out 2>&1 &
 sleep 3
 
