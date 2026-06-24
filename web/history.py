@@ -18,7 +18,7 @@ _INCOMPLETE_TASKS_LOCK = threading.Lock()
 
 
 def _results_dir() -> Path:
-    return Path.home() / ".tradingagents" / "logs"
+    return Path(DEFAULT_CONFIG["results_dir"])
 
 
 def get_history() -> list[dict[str, str]]:
