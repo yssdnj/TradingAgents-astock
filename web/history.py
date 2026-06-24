@@ -13,31 +13,49 @@ from typing import Any
 from tradingagents.default_config import DEFAULT_CONFIG
 
 
-_INCOMPLETE_TASKS_FILE = Path.home() / ".tradingagents" / "incomplete_tasks.json"
 _INCOMPLETE_TASKS_LOCK = threading.Lock()
 
 
-def _results_dir() -> Path:
-    return Path(DEFAULT_CONFIG["results_dir"])
+def _results_dir(username: str | None = None) -> Path:
+    base = Path(DEFAULT_CONFIG["results_dir"])
+    return base / username if username else base
 
 
-def get_history() -> list[dict[str, str]]:
+def _incomplete_tasks_file(username: str | None = None) -> Path:
+    base = Path(DEFAULT_CONFIG["results_dir"])
+    if username:
+        return base / username / "incomplete_tasks.json"
+    return base / "incomplete_tasks.json"
+
+
+def get_history(username: str | None = None, role: str | None = None) -> list[dict[str, str]]:
     """Scan saved analysis logs and return a sorted list (newest first).
 
-    Each entry: {"ticker": "300750", "date": "2026-05-12", "path": "/abs/path/...json"}
+    Admin sees all users' history; regular users see only their own.
+    Each entry: {"ticker": "300750", "date": "2026-05-12", "path": "/abs/path/...json", "username": "larry"}
     """
-    root = _results_dir()
-    if not root.exists():
+    base = Path(DEFAULT_CONFIG["results_dir"])
+    if not base.exists():
         return []
 
+    if role == "admin":
+        # scan all user subdirectories
+        search_roots = [d for d in base.iterdir() if d.is_dir()]
+    else:
+        search_roots = [base / username] if username else [base]
+
     entries: list[dict[str, str]] = []
-    for log_file in root.rglob("full_states_log_*.json"):
-        match = re.search(r"full_states_log_(\d{4}-\d{2}-\d{2})\.json$", log_file.name)
-        if not match:
+    for root in search_roots:
+        if not root.exists():
             continue
-        date = match.group(1)
-        ticker = log_file.parent.parent.name
-        entries.append({"ticker": ticker, "date": date, "path": str(log_file)})
+        uname = root.name
+        for log_file in root.rglob("full_states_log_*.json"):
+            match = re.search(r"full_states_log_(\d{4}-\d{2}-\d{2})\.json$", log_file.name)
+            if not match:
+                continue
+            date = match.group(1)
+            ticker = log_file.parent.parent.name
+            entries.append({"ticker": ticker, "date": date, "path": str(log_file), "username": uname})
 
     entries.sort(key=lambda e: e["date"], reverse=True)
     return entries
@@ -47,19 +65,20 @@ def _completed_key(ticker: str, trade_date: str) -> tuple[str, str]:
     return ticker.upper(), trade_date
 
 
-def _completed_keys() -> set[tuple[str, str]]:
+def _completed_keys(username: str | None = None, role: str | None = None) -> set[tuple[str, str]]:
     return {
         _completed_key(entry["ticker"], entry["date"])
-        for entry in get_history()
+        for entry in get_history(username=username, role=role)
     }
 
 
-def _load_incomplete_index() -> list[dict[str, Any]]:
-    if not _INCOMPLETE_TASKS_FILE.exists():
+def _load_incomplete_index(username: str | None = None) -> list[dict[str, Any]]:
+    fpath = _incomplete_tasks_file(username)
+    if not fpath.exists():
         return []
 
     try:
-        with open(_INCOMPLETE_TASKS_FILE, encoding="utf-8") as f:
+        with open(fpath, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError):
         return []
@@ -81,20 +100,21 @@ def _load_incomplete_index() -> list[dict[str, Any]]:
     return entries
 
 
-def _save_incomplete_index(entries: list[dict[str, Any]]) -> None:
-    parent = _INCOMPLETE_TASKS_FILE.parent
+def _save_incomplete_index(entries: list[dict[str, Any]], username: str | None = None) -> None:
+    fpath = _incomplete_tasks_file(username)
+    parent = fpath.parent
     parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         "w",
         encoding="utf-8",
         dir=parent,
-        prefix=f"{_INCOMPLETE_TASKS_FILE.stem}.",
+        prefix=f"{fpath.stem}.",
         suffix=".tmp",
         delete=False,
     ) as f:
         json.dump(entries, f, ensure_ascii=False, indent=2)
         tmp = Path(f.name)
-    tmp.replace(_INCOMPLETE_TASKS_FILE)
+    tmp.replace(fpath)
 
 
 def _checkpoint_step(ticker: str, trade_date: str) -> int | None:
@@ -111,6 +131,7 @@ def record_incomplete_task(
     trade_date: str,
     *,
     status: str,
+    username: str | None = None,
     error: str | None = None,
     completed_stages: list[str] | None = None,
 ) -> None:
@@ -123,7 +144,7 @@ def record_incomplete_task(
     with _INCOMPLETE_TASKS_LOCK:
         entries = [
             entry
-            for entry in _load_incomplete_index()
+            for entry in _load_incomplete_index(username)
             if _completed_key(entry["ticker"], entry["trade_date"])
             != _completed_key(ticker, trade_date)
         ]
@@ -139,30 +160,30 @@ def record_incomplete_task(
             }
         )
         entries.sort(key=lambda e: float(e.get("updated_at", 0)), reverse=True)
-        _save_incomplete_index(entries)
+        _save_incomplete_index(entries, username)
 
 
-def clear_incomplete_task(ticker: str, trade_date: str) -> None:
+def clear_incomplete_task(ticker: str, trade_date: str, username: str | None = None) -> None:
     """Remove an incomplete task once it completes successfully."""
     ticker = ticker.strip().upper()
     trade_date = trade_date.strip()
     with _INCOMPLETE_TASKS_LOCK:
         entries = [
             entry
-            for entry in _load_incomplete_index()
+            for entry in _load_incomplete_index(username)
             if _completed_key(entry["ticker"], entry["trade_date"])
             != _completed_key(ticker, trade_date)
         ]
-        _save_incomplete_index(entries)
+        _save_incomplete_index(entries, username)
 
 
-def get_incomplete_history() -> list[dict[str, Any]]:
+def get_incomplete_history(username: str | None = None, role: str | None = None) -> list[dict[str, Any]]:
     """Return unfinished tasks that can be resumed from their checkpoint."""
-    completed = _completed_keys()
+    completed = _completed_keys(username=username, role=role)
     active_entries: list[dict[str, Any]] = []
 
     with _INCOMPLETE_TASKS_LOCK:
-        entries = _load_incomplete_index()
+        entries = _load_incomplete_index(username)
         for entry in entries:
             key = _completed_key(entry["ticker"], entry["trade_date"])
             if key in completed:
@@ -174,7 +195,7 @@ def get_incomplete_history() -> list[dict[str, Any]]:
 
         active_entries.sort(key=lambda e: float(e.get("updated_at", 0)), reverse=True)
         if len(active_entries) != len(entries):
-            _save_incomplete_index(active_entries)
+            _save_incomplete_index(active_entries, username)
     return active_entries
 
 

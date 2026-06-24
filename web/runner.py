@@ -29,7 +29,7 @@ def _discard_stopped_run(
     """Clear resumable artifacts for a user-stopped run."""
     from tradingagents.graph.checkpointer import clear_checkpoint
 
-    clear_incomplete_task(ticker, trade_date)
+    clear_incomplete_task(ticker, trade_date, username=config.get("username"))
     clear_checkpoint(config["data_cache_dir"], ticker, trade_date)
     tracker.mark_stopped()
 
@@ -139,6 +139,7 @@ def _run(ticker: str, trade_date: str, config: dict, tracker: ProgressTracker) -
                 ticker,
                 trade_date,
                 status="paused" if tracker.is_paused else "running",
+                username=config.get("username"),
                 completed_stages=tracker.completed_stages,
             )
 
@@ -161,7 +162,7 @@ def _run(ticker: str, trade_date: str, config: dict, tracker: ProgressTracker) -
             return
 
         tracker.mark_complete(last_chunk, signal)
-        clear_incomplete_task(ticker, trade_date)
+        clear_incomplete_task(ticker, trade_date, username=config.get("username"))
     finally:
         graph.close_graph_run()
 
@@ -181,6 +182,7 @@ def run_analysis_in_thread(
         ticker,
         trade_date,
         status="running",
+        username=config.get("username"),
         completed_stages=tracker.completed_stages,
     )
 
@@ -199,6 +201,7 @@ def run_analysis_in_thread(
                 ticker,
                 trade_date,
                 status="error",
+                username=config.get("username"),
                 error=str(exc),
                 completed_stages=tracker.completed_stages,
             )

@@ -49,8 +49,13 @@ def _resolve_user_input(raw: str) -> tuple[str, str | None]:
         return "", str(e)
 
 
+def _current_user() -> tuple[str | None, str | None]:
+    return st.session_state.get("username"), st.session_state.get("role")
+
+
 def _clear_analysis_artifacts(ticker: str, trade_date: str) -> None:
-    clear_incomplete_task(ticker, trade_date)
+    username, _ = _current_user()
+    clear_incomplete_task(ticker, trade_date, username=username)
     clear_checkpoint(DEFAULT_CONFIG["data_cache_dir"], ticker, trade_date)
 
 
@@ -69,10 +74,12 @@ def _render_analysis_controls(raw_ticker: str, trade_date_value: date) -> None:
         disabled=pause_disabled,
     ):
         if tracker.pause():
+            username, _ = _current_user()
             record_incomplete_task(
                 tracker.ticker,
                 tracker.trade_date,
                 status="paused",
+                username=username,
                 completed_stages=tracker.completed_stages,
             )
         st.rerun()
@@ -85,10 +92,12 @@ def _render_analysis_controls(raw_ticker: str, trade_date_value: date) -> None:
         disabled=resume_disabled,
     ):
         if tracker.resume():
+            username, _ = _current_user()
             record_incomplete_task(
                 tracker.ticker,
                 tracker.trade_date,
                 status="running",
+                username=username,
                 completed_stages=tracker.completed_stages,
             )
         st.rerun()
@@ -114,8 +123,9 @@ def _render_analysis_controls(raw_ticker: str, trade_date_value: date) -> None:
                 return
 
         if tracker is not None and tracker.is_running:
+            username, _ = _current_user()
             tracker.request_stop()
-            clear_incomplete_task(target_ticker, target_date)
+            clear_incomplete_task(target_ticker, target_date, username=username)
         else:
             if tracker is not None:
                 tracker.mark_stopped()
@@ -193,9 +203,10 @@ def _render_llm_config() -> None:
 
 def render_sidebar() -> None:
     """Render the sidebar with input controls and history."""
+    username, role = _current_user()
 
     st.markdown(
-        """
+        f"""
         <div style="text-align:center; margin-bottom:1.5rem;">
             <span style="font-size:2rem; font-weight:800; color:#ff5a1f;">Trading</span><span style="font-size:2rem; font-weight:800; color:#f5f1eb;">Agents</span><span style="font-size:2rem; font-weight:800; color:#f5f1eb;">-</span><span style="font-size:2rem; font-weight:800; color:#ff5a1f;">Astock</span>
             <div style="font-size:0.85rem; color:#888; margin-top:0.2rem;">
@@ -203,6 +214,9 @@ def render_sidebar() -> None:
             </div>
             <div style="font-size:0.7rem; color:#555; margin-top:0.3rem;">
                 by <a href="https://github.com/simonlin1212" style="color:#ff5a1f; text-decoration:none;">simonlin1212</a>
+            </div>
+            <div style="font-size:0.75rem; color:#666; margin-top:0.4rem;">
+                {'👑 ' if role == 'admin' else '👤 '}{username or ''}{'（管理员）' if role == 'admin' else ''}
             </div>
         </div>
         """,
@@ -256,7 +270,7 @@ def render_sidebar() -> None:
     st.markdown("---")
     st.markdown("#### 未完成任务")
 
-    incomplete = get_incomplete_history()
+    incomplete = get_incomplete_history(username=username, role=role)
     if not incomplete:
         st.caption("暂无未完成任务")
     else:
@@ -285,15 +299,16 @@ def render_sidebar() -> None:
     st.markdown("---")
     st.markdown("#### 历史记录")
 
-    history = get_history()
+    history = get_history(username=username, role=role)
     if not history:
         st.caption("暂无历史记录")
         return
 
     for entry in history[:20]:
         t, d = entry["ticker"], entry["date"]
-        label = f"{t}  ·  {d}"
-        if st.button(label, key=f"hist_{t}_{d}", use_container_width=True):
+        uname = entry.get("username", "")
+        label = f"{t}  ·  {d}" + (f"  ·  {uname}" if role == "admin" else "")
+        if st.button(label, key=f"hist_{t}_{d}_{uname}", use_container_width=True):
             st.session_state["viewing_history"] = entry["path"]
             st.session_state["start_analysis"] = None
 

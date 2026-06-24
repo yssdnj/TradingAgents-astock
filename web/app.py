@@ -38,58 +38,33 @@ st.set_page_config(
 
 # ── Login guard ──────────────────────────────────────────────────────────────
 
+def _parse_users() -> dict[str, dict[str, str]]:
+    """Parse LOGIN_USERS env var into {username: {password, role}}."""
+    raw = os.getenv("LOGIN_USERS", "")
+    users: dict[str, dict[str, str]] = {}
+    for entry in raw.split(","):
+        parts = entry.strip().split(":")
+        if len(parts) == 3:
+            uname, passwd, role = parts
+            users[uname.strip()] = {"password": passwd.strip(), "role": role.strip()}
+    return users
+
+
 def _check_login() -> None:
     if st.session_state.get("logged_in"):
         return
-    st.markdown(
-        """
-        <style>
-        .login-wrapper {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 70vh;
-        }
-        .login-box {
-            background: #ffffff;
-            border-radius: 12px;
-            padding: 40px 48px;
-            width: 360px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-        }
-        .login-box h2 {
-            color: #1a1a2e;
-            font-size: 22px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            text-align: center;
-        }
-        .login-box p {
-            color: #666;
-            font-size: 13px;
-            text-align: center;
-            margin-bottom: 24px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
     _, col, _ = st.columns([2, 1, 2])
     with col:
-        st.markdown(
-            '<div class="login-box">'
-            '<h2>📈 TradingAgents</h2>'
-            '<p>A股智能投研平台</p>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown("### 请登录")
         username = st.text_input("账号", placeholder="请输入账号")
         password = st.text_input("密码", type="password", placeholder="请输入密码")
         if st.button("登 录", use_container_width=True):
-            expected_user = os.getenv("LOGIN_USERNAME", "")
-            expected_pass = os.getenv("LOGIN_PASSWORD", "")
-            if username == expected_user and password == expected_pass:
+            users = _parse_users()
+            user = users.get(username)
+            if user and user["password"] == password:
                 st.session_state.logged_in = True
+                st.session_state.username = username
+                st.session_state.role = user["role"]
                 st.rerun()
             else:
                 st.error("账号或密码错误")
@@ -218,6 +193,7 @@ st.markdown(
 # ── Build config ─────────────────────────────────────────────────────────────
 
 def _build_config() -> dict:
+    from pathlib import Path
     config = DEFAULT_CONFIG.copy()
     config["llm_provider"] = st.session_state.get("llm_provider", "minimax")
     config["deep_think_llm"] = st.session_state.get("deep_think_llm", "MiniMax-M2.7")
@@ -236,6 +212,14 @@ def _build_config() -> dict:
     config["max_risk_discuss_rounds"] = 1
     config["checkpoint_enabled"] = True
     config["output_language"] = "Chinese"
+    # Per-user isolation: results and memory under <base>/<username>/
+    username = st.session_state.get("username")
+    if username:
+        base_results = Path(DEFAULT_CONFIG["results_dir"])
+        base_memory = Path(DEFAULT_CONFIG["memory_log_path"]).parent.parent
+        config["username"] = username
+        config["results_dir"] = str(base_results / username)
+        config["memory_log_path"] = str(base_memory / username / "trading_memory.md")
     return config
 
 
