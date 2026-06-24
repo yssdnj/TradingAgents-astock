@@ -313,4 +313,8 @@ def render_sidebar() -> None:
             st.session_state["start_analysis"] = None
 
     st.markdown("---")
+    if st.button("退出登录", use_container_width=True):
+        for key in ["logged_in", "username", "role"]:
+            st.session_state.pop(key, None)
+        st.rerun()
     st.caption("⚠️ 仅供学习研究，不构成投资建议")
