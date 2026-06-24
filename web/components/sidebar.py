@@ -302,15 +302,14 @@ def render_sidebar() -> None:
     history = get_history(username=username, role=role)
     if not history:
         st.caption("暂无历史记录")
-        return
-
-    for entry in history[:20]:
-        t, d = entry["ticker"], entry["date"]
-        uname = entry.get("username", "")
-        label = f"{t}  ·  {d}" + (f"  ·  {uname}" if role == "admin" else "")
-        if st.button(label, key=f"hist_{t}_{d}_{uname}", use_container_width=True):
-            st.session_state["viewing_history"] = entry["path"]
-            st.session_state["start_analysis"] = None
+    else:
+        for entry in history[:20]:
+            t, d = entry["ticker"], entry["date"]
+            uname = entry.get("username", "")
+            label = f"{t}  ·  {d}" + (f"  ·  {uname}" if role == "admin" else "")
+            if st.button(label, key=f"hist_{t}_{d}_{uname}", use_container_width=True):
+                st.session_state["viewing_history"] = entry["path"]
+                st.session_state["start_analysis"] = None
 
     st.markdown("---")
     if st.button("退出登录", use_container_width=True):
