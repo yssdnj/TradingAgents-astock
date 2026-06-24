@@ -53,12 +53,90 @@ def _parse_users() -> dict[str, dict[str, str]]:
 def _check_login() -> None:
     if st.session_state.get("logged_in"):
         return
-    _, col, _ = st.columns([2, 1, 2])
-    with col:
-        st.markdown("### 请登录")
-        username = st.text_input("账号", placeholder="请输入账号")
-        password = st.text_input("密码", type="password", placeholder="请输入密码")
-        if st.button("登 录", use_container_width=True):
+
+    st.markdown(
+        """
+        <style>
+        .stApp { background: #f0f2f6 !important; }
+        section[data-testid="stSidebar"] { display: none !important; }
+
+        /* Left info panel */
+        .login-left-panel {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
+            border-radius: 16px;
+            padding: 48px 40px;
+            color: #fff;
+            min-height: 480px;
+        }
+        .login-left-panel h1 { font-size: 1.7rem; font-weight: 800; margin-bottom: 6px; }
+        .login-left-panel h1 span { color: #ff5a1f; }
+        .login-left-panel .sub { font-size: 0.85rem; color: #aab; margin-bottom: 32px; }
+        .feat { display: flex; gap: 10px; margin-bottom: 16px; font-size: 0.88rem; color: #ccd; line-height: 1.5; }
+        .feat-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+        .login-left-panel .disc { font-size: 0.72rem; color: #778; margin-top: 32px; }
+
+        /* Right login panel */
+        div[data-testid="stHorizontalBlock"] div[data-testid="stColumn"]:last-child {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 32px 28px;
+            min-height: 480px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+        }
+
+        /* Override dark input styles for login page */
+        .stApp .stTextInput input {
+            background: #f7f8fa !important;
+            border: 1.5px solid #dde1e9 !important;
+            border-radius: 8px !important;
+            color: #1a1a2e !important;
+            font-size: 0.95rem !important;
+        }
+        .stApp .stTextInput input:focus {
+            border-color: #ff5a1f !important;
+            box-shadow: 0 0 0 2px rgba(255,90,31,0.15) !important;
+            background: #fff !important;
+        }
+        .stApp .stTextInput label {
+            color: #555 !important;
+            font-size: 0.82rem !important;
+            font-weight: 600 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    left, right = st.columns([3, 2], gap="large")
+
+    with left:
+        st.markdown(
+            """
+            <div class="login-left-panel">
+              <h1>Trading<span>Agents</span><br>-Astock</h1>
+              <div class="sub">A股多Agent智能投研系统</div>
+              <div class="feat"><span class="feat-icon">🤖</span><span>7个AI分析师角色协同，覆盖市场、情绪、新闻、基本面、政策、游资、解禁多维视角</span></div>
+              <div class="feat"><span class="feat-icon">⚔️</span><span>Bull vs Bear辩论 + 三方风险辩论，自动生成结构化投资报告</span></div>
+              <div class="feat"><span class="feat-icon">📡</span><span>实时对接东财、腾讯、新浪、同花顺等主流数据源</span></div>
+              <div class="feat"><span class="feat-icon">🔍</span><span>支持6位股票代码或中文全称，自动解析分析</span></div>
+              <div class="feat"><span class="feat-icon">📄</span><span>分析完成后可导出PDF报告，留存研究记录</span></div>
+              <div class="disc">⚠️ 仅供学习研究使用，不构成投资建议</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with right:
+        st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='font-size:1.4rem;font-weight:700;color:#1a1a2e;margin-bottom:8px;letter-spacing:-0.01em'>账号登录</div>"
+            "<div style='font-size:0.82rem;color:#888;margin-bottom:28px'>请输入您的账号和密码</div>",
+            unsafe_allow_html=True,
+        )
+        username = st.text_input("账号", placeholder="请输入账号", label_visibility="collapsed")
+        password = st.text_input("密码", type="password", placeholder="请输入密码", label_visibility="collapsed")
+        if st.button("登 录", use_container_width=True, type="primary"):
             users = _parse_users()
             user = users.get(username)
             if user and user["password"] == password:
