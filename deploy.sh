@@ -32,7 +32,20 @@ else
 fi
 sleep 1
 
-# 3. 启动新进程
+# 3. 安装中文字体（PDF导出依赖）
+echo ""
+echo "▶ 检查中文字体..."
+if fc-list 2>/dev/null | grep -qi "wqy\|noto.*cjk\|droid.*fallback"; then
+    echo "  中文字体已存在，跳过安装"
+else
+    echo "  安装 fonts-wqy-microhei..."
+    apt-get install -y fonts-wqy-microhei 2>/dev/null || \
+    apt-get install -y fonts-noto-cjk 2>/dev/null || \
+    echo "  ⚠️  字体安装失败，PDF导出将不可用（Markdown导出仍可用）"
+    fc-cache -f 2>/dev/null || true
+fi
+
+# 4. 启动新进程
 echo ""
 echo "▶ 启动服务..."
 nohup streamlit run web/app.py \
