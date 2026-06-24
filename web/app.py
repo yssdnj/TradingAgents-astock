@@ -91,11 +91,19 @@ def _check_login() -> None:
             border-radius: 8px !important;
             color: #1a1a2e !important;
             font-size: 0.95rem !important;
+            cursor: text !important;
         }
         .stApp .stTextInput input:focus {
             border-color: #ff5a1f !important;
             box-shadow: 0 0 0 2px rgba(255,90,31,0.15) !important;
             background: #fff !important;
+        }
+        .stApp .stTextInput input::placeholder {
+            color: #aab0bb !important;
+            opacity: 1 !important;
+        }
+        .stApp .stTextInput input {
+            caret-color: #1a1a2e !important;
         }
         .stApp .stTextInput label {
             color: #555 !important;
