@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+import json
 from pathlib import Path
 
 import streamlit as st
@@ -20,6 +21,7 @@ load_dotenv(_PROJECT_ROOT / ".env", override=True)
 
 from tradingagents.default_config import DEFAULT_CONFIG  # noqa: E402
 
+from web.auth import create_remember_token, remember_secret, verify_remember_token  # noqa: E402
 from web.components.progress_panel import render_progress  # noqa: E402
 from web.components.report_viewer import render_report  # noqa: E402
 from web.components.sidebar import render_sidebar  # noqa: E402
@@ -38,6 +40,9 @@ st.set_page_config(
 
 # ── Login guard ──────────────────────────────────────────────────────────────
 
+_REMEMBER_COOKIE = "tradingagents_astock_login"
+_REMEMBER_TTL_SECONDS = 30 * 24 * 60 * 60
+
 def _parse_users() -> dict[str, dict[str, str]]:
     """Parse LOGIN_USERS env var into {username: {password, role}}."""
     raw = os.getenv("LOGIN_USERS", "")
@@ -50,8 +55,50 @@ def _parse_users() -> dict[str, dict[str, str]]:
     return users
 
 
+def _cookie_script(token: str | None) -> None:
+    if token:
+        token_js = json.dumps(token)
+        max_age = _REMEMBER_TTL_SECONDS
+        script = f"""
+        <script>
+        document.cookie = "{_REMEMBER_COOKIE}=" + encodeURIComponent({token_js}) +
+            "; Max-Age={max_age}; Path=/; SameSite=Lax";
+        window.location.replace(window.location.pathname);
+        </script>
+        """
+    else:
+        script = f"""
+        <script>
+        document.cookie = "{_REMEMBER_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax";
+        </script>
+        """
+    st.html(script, unsafe_allow_javascript=True)
+
+
+def _restore_remembered_login(users: dict[str, dict[str, str]], secret: str) -> bool:
+    token = st.context.cookies.get(_REMEMBER_COOKIE)
+    if not token:
+        return False
+
+    remembered = verify_remember_token(token, users, secret)
+    if not remembered:
+        _cookie_script(None)
+        return False
+
+    st.session_state.logged_in = True
+    st.session_state.username = remembered["username"]
+    st.session_state.role = remembered["role"]
+    return True
+
+
 def _check_login() -> None:
     if st.session_state.get("logged_in"):
+        return
+
+    users_raw = os.getenv("LOGIN_USERS", "")
+    users = _parse_users()
+    secret = remember_secret(users_raw, os.getenv("LOGIN_REMEMBER_SECRET"))
+    if _restore_remembered_login(users, secret):
         return
 
     st.markdown(
@@ -144,13 +191,23 @@ def _check_login() -> None:
         )
         username = st.text_input("账号", placeholder="请输入账号", label_visibility="collapsed")
         password = st.text_input("密码", type="password", placeholder="请输入密码", label_visibility="collapsed")
+        remember_me = st.checkbox("记住我，30 天内自动登录", value=True)
         if st.button("登 录", use_container_width=True, type="primary"):
-            users = _parse_users()
             user = users.get(username)
             if user and user["password"] == password:
                 st.session_state.logged_in = True
                 st.session_state.username = username
                 st.session_state.role = user["role"]
+                if remember_me:
+                    token = create_remember_token(
+                        username,
+                        user["role"],
+                        secret,
+                        ttl_seconds=_REMEMBER_TTL_SECONDS,
+                    )
+                    _cookie_script(token)
+                    st.stop()
+                _cookie_script(None)
                 st.rerun()
             else:
                 st.error("账号或密码错误")
